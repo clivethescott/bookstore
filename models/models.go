@@ -85,7 +85,7 @@ func (env *DBEnv) CreateBook(req *Book) error {
 	}
 
 	result, err := env.DB.NamedExec(`INSERT INTO books(isbn, title, author, price) 
-															VALUES(:isbn, :title, :author, :price)`, req)
+	VALUES(:isbn, :title, :author, :price)`, req)
 	if err != nil {
 		return err
 	}
