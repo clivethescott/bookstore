@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -35,10 +36,10 @@ func (b Book) String() string {
 }
 
 // GetBooks find all books
-func (env *DBEnv) GetBooks() ([]*Book, error) {
+func (env *DBEnv) GetBooks(ctx context.Context) ([]*Book, error) {
 
 	books := []*Book{}
-	err := env.DB.Select(&books, "SELECT isbn, title, author, price from books")
+	err := env.DB.SelectContext(ctx, &books, "SELECT isbn, title, author, price from books")
 	if err != nil {
 		return nil, err
 	}
@@ -46,9 +47,9 @@ func (env *DBEnv) GetBooks() ([]*Book, error) {
 }
 
 // GetBookByIsbn finds a single book by its ISBN
-func (env *DBEnv) GetBookByIsbn(isbn string) (*Book, error) {
+func (env *DBEnv) GetBookByIsbn(ctx context.Context, isbn string) (*Book, error) {
 	book := new(Book)
-	err := env.DB.Get(book, "SELECT isbn, title, author, price from books WHERE isbn = $1", isbn)
+	err := env.DB.GetContext(ctx, book, "SELECT isbn, title, author, price from books WHERE isbn = $1", isbn)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -59,9 +60,9 @@ func (env *DBEnv) GetBookByIsbn(isbn string) (*Book, error) {
 	return book, nil
 }
 
-func (env *DBEnv) hasBookByIsbn(isbn string) (bool, error) {
+func (env *DBEnv) hasBookByIsbn(ctx context.Context, isbn string) (bool, error) {
 
-	_, err := env.GetBookByIsbn(isbn)
+	_, err := env.GetBookByIsbn(ctx, isbn)
 	if err == nil {
 		return true, nil
 	}
@@ -70,12 +71,12 @@ func (env *DBEnv) hasBookByIsbn(isbn string) (bool, error) {
 }
 
 // CreateBook creates a new book
-func (env *DBEnv) CreateBook(req *Book) error {
+func (env *DBEnv) CreateBook(ctx context.Context, req *Book) error {
 	if req.Isbn == "" || req.Title == "" || req.Author == "" {
 		return errors.New("all fields are required")
 	}
 
-	exists, err := env.hasBookByIsbn(req.Isbn)
+	exists, err := env.hasBookByIsbn(ctx, req.Isbn)
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,7 @@ func (env *DBEnv) CreateBook(req *Book) error {
 		return ErrBookExists
 	}
 
-	result, err := env.DB.NamedExec(`INSERT INTO books(isbn, title, author, price) 
+	result, err := env.DB.NamedExecContext(ctx, `INSERT INTO books(isbn, title, author, price) 
 	VALUES(:isbn, :title, :author, :price)`, req)
 	if err != nil {
 		return err

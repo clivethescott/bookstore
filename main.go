@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/clivethescott/bookstore/models"
 	"github.com/go-chi/chi/v5"
@@ -16,10 +17,10 @@ import (
 var env *models.DBEnv
 
 func init() {
-	var err error
-	db, err := sqlx.Connect("postgres", "user=clive dbname=bookstore sslmode=disable")
-	if err != nil {
-		log.Fatalln(err)
+	db := sqlx.MustOpen("postgres", "user=clive dbname=bookstore sslmode=disable")
+	db.SetMaxOpenConns(5)
+	if err := db.Ping(); err != nil {
+		log.Printf("failed to connect to the db: %v\n", err)
 	}
 
 	env = &models.DBEnv{DB: db}
@@ -32,7 +33,14 @@ func main() {
 	r.MethodFunc(http.MethodPost, "/book", createBook)
 	r.MethodFunc(http.MethodGet, "/book/{isbn}", bookByIsbn)
 
-	http.ListenAndServe(":3000", r)
+	server := &http.Server{
+		Addr:         ":3000",
+		Handler:      r,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+	}
+
+	server.ListenAndServe()
 }
 
 func acceptJSON(handler http.Handler) http.Handler {
@@ -65,7 +73,7 @@ func createBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := env.CreateBook(req); err != nil {
+	if err := env.CreateBook(r.Context(), req); err != nil {
 		if err == models.ErrBookExists {
 			http.Error(w, "book already exists", http.StatusBadRequest)
 			return
@@ -74,7 +82,7 @@ func createBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	book, err := env.GetBookByIsbn(req.Isbn)
+	book, err := env.GetBookByIsbn(r.Context(), req.Isbn)
 	if err != nil {
 		serverError(err, w)
 		return
@@ -91,7 +99,7 @@ func createBook(w http.ResponseWriter, r *http.Request) {
 
 func bookByIsbn(w http.ResponseWriter, r *http.Request) {
 	isbn := chi.URLParam(r, "isbn")
-	book, err := env.GetBookByIsbn(isbn)
+	book, err := env.GetBookByIsbn(r.Context(), isbn)
 
 	if err != nil {
 		if err == models.ErrBookNotFound {
@@ -113,7 +121,7 @@ func bookByIsbn(w http.ResponseWriter, r *http.Request) {
 
 func books(w http.ResponseWriter, r *http.Request) {
 
-	books, err := env.GetBooks()
+	books, err := env.GetBooks(r.Context())
 	if err != nil {
 		serverError(err, w)
 		return
