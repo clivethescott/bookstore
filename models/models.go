@@ -28,6 +28,9 @@ var (
 
 	// ErrBookExists is returned when a matching book exists
 	ErrBookExists = errors.New("book already exists")
+
+	// ErrInvalidBook is returned when a book has missing details
+	ErrInvalidBook = errors.New("book missing details")
 )
 
 func (b Book) String() string {
@@ -49,13 +52,13 @@ func (env *DBEnv) GetBooks(ctx context.Context) ([]*Book, error) {
 // GetBookByIsbn finds a single book by its ISBN
 func (env *DBEnv) GetBookByIsbn(ctx context.Context, isbn string) (*Book, error) {
 	book := new(Book)
-	err := env.DB.GetContext(ctx, book, "SELECT isbn, title, author, price from books WHERE isbn = $1", isbn)
+	err := env.DB.GetContext(ctx, book, "SELECT isbn, title, author, price from books WHERE isbn = ?", isbn)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrBookNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get book by isbn: %s, error: %w", isbn, err)
 	}
 	return book, nil
 }
@@ -67,6 +70,9 @@ func (env *DBEnv) hasBookByIsbn(ctx context.Context, isbn string) (bool, error) 
 		return true, nil
 	}
 
+	if err == ErrBookNotFound {
+		return false, nil
+	}
 	return false, err
 }
 
@@ -78,7 +84,7 @@ func (env *DBEnv) CreateBook(ctx context.Context, req *Book) error {
 
 	exists, err := env.hasBookByIsbn(ctx, req.Isbn)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to check if has book: %w", err)
 	}
 
 	if exists {
